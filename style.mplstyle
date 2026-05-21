@@ -1,0 +1,59 @@
+# style.mplstyle
+
+# Fonts & Text
+font.family: sans-serif
+font.sans-serif: Arial, Helvetica, DejaVu Sans
+font.size: 12.0
+axes.labelsize: 12.0
+axes.titlesize: 12.0
+
+# LaTeX Font Override
+mathtext.fontset: custom
+mathtext.rm: Arial
+mathtext.it: Arial:italic
+mathtext.bf: Arial:bold
+mathtext.sf: Arial
+
+# Line Widths & Geometry
+axes.linewidth: 0.4
+axes.spines.left: True
+axes.spines.right: True
+axes.spines.top: True
+axes.spines.bottom: True
+
+# Default Symbol
+lines.markersize: 4
+lines.markeredgecolor: black
+lines.markeredgewidth: 0.4
+lines.linestyle: None
+
+# Tick Markers
+xtick.direction: in
+ytick.direction: in
+xtick.top: True
+ytick.right: True
+xtick.minor.visible: True
+ytick.minor.visible: True
+
+# Major Tick Sizes & Widths
+xtick.major.size: 3.6
+ytick.major.size: 3.6
+xtick.major.width: 0.7
+ytick.major.width: 0.7
+
+# Axis Padding
+xtick.major.pad: 6.0
+ytick.major.pad: 6.0
+axes.labelpad: 6.0
+
+# Minor Tick Sizes & Widths
+xtick.minor.size: 2.2
+ytick.minor.size: 2.2
+xtick.minor.width: 0.5
+ytick.minor.width: 0.5
+
+# Save Defaults
+savefig.bbox: tight
+savefig.pad_inches: 0.05
+savefig.format: jpg
+savefig.dpi: 600
