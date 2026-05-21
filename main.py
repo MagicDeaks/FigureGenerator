@@ -41,6 +41,13 @@ def parse_input():
             help='Padding for y-axes.'
         )
 
+        parser.add_argument(
+            '-t', '--inset-temp',
+            type=float,
+            default=14.7,
+            help='Maximum temperature of the inset.'
+        )
+
         args = parser.parse_args()
 
         print(f"Loading data from: {args.input}")
@@ -53,6 +60,7 @@ def parse_input():
     except Exception as e:
         print(e)
         exit(1)
+
 
 def read_excel_file(path):
     with pd.ExcelFile(path, engine='openpyxl') as xls:
@@ -67,7 +75,13 @@ def read_excel_file(path):
 
         return all_data
 
-def generate_heat_capacity_figure(all_data, output_dir, x_pad, y_pad):
+
+def generate_heat_capacity_figure(all_data, args):
+    output_dir = args.output_dir
+    x_pad = args.x_padding
+    y_pad = args.y_padding
+    inset_xmax = args.inset_temp
+
     # Import style information
     plt.style.use('./style.mplstyle')
 
@@ -79,7 +93,7 @@ def generate_heat_capacity_figure(all_data, output_dir, x_pad, y_pad):
     inset_bounds = (0.50, 0.10, 0.45, 0.40)
     ax_inset = ax.inset_axes(inset_bounds)
 
-    inset_xmin, inset_xmax, inset_ymin = 0, 14.7, 0
+    inset_xmin, inset_ymin = 0, 0
 
     # Plot Data & Determine Maximum
     max_temperature = 0
@@ -89,6 +103,7 @@ def generate_heat_capacity_figure(all_data, output_dir, x_pad, y_pad):
     marker = 's'
     color = 'blue'
     for label, df in all_data.items():
+        # Use a Different Shape & Colour for each Dataset
         match i:
             case 1:
                 marker = 'o'
@@ -105,13 +120,18 @@ def generate_heat_capacity_figure(all_data, output_dir, x_pad, y_pad):
             case 5:
                 marker = '*'
                 color = 'orange'
-        add_heat_capacity_plot(ax, ax_inset, label, df['Measured Temperature'], df['Measured Heat Capacity'], df['Smoothed Temperature'], df['Smoothed Heat Capacity'], marker=marker, color=color)
+        # Plot the Heat Capacity
+        add_heat_capacity_plot(ax, ax_inset, label, df['Measured Temperature'], df['Measured Heat Capacity'],
+                               df['Smoothed Temperature'], df['Smoothed Heat Capacity'], marker=marker, color=color)
+        # Determine Maxima
         if df['Measured Temperature'].max() > max_temperature:
             max_temperature = df['Measured Temperature'].max()
         if df['Measured Heat Capacity'].max() > max_heat_capacity:
             max_heat_capacity = df['Measured Heat Capacity'].max()
-        if df['Measured Heat Capacity'][:index_of_max(df['Measured Temperature'], inset_xmax)].max() > inset_max_heat_capacity:
-            inset_max_heat_capacity = df['Measured Heat Capacity'][:index_of_max(df['Measured Temperature'], inset_xmax)].max()
+        if df['Measured Heat Capacity'][
+            :index_of_max(df['Measured Temperature'], inset_xmax)].max() > inset_max_heat_capacity:
+            inset_max_heat_capacity = df['Measured Heat Capacity'][
+                :index_of_max(df['Measured Temperature'], inset_xmax)].max()
         i += 1
 
     # Set Plot Limits
@@ -183,7 +203,9 @@ def generate_heat_capacity_figure(all_data, output_dir, x_pad, y_pad):
 
     plt.close(fig)
 
-def add_heat_capacity_plot(ax, ax_inset, label, measured_temperature, measured_heat_capacity, smoothed_temperature, smoothed_heat_capacity, marker='s', color='blue'):
+
+def add_heat_capacity_plot(ax, ax_inset, label, measured_temperature, measured_heat_capacity, smoothed_temperature,
+                           smoothed_heat_capacity, marker='s', color='blue'):
     ax.plot(measured_temperature, measured_heat_capacity,
             zorder=5,
             clip_on=False,
@@ -199,18 +221,19 @@ def add_heat_capacity_plot(ax, ax_inset, label, measured_temperature, measured_h
             zorder=2
             )
     ax_inset.plot(measured_temperature, measured_heat_capacity,
-            zorder=5,
-            clip_on=True,
-            marker=marker,
-            color=color
-            )
+                  zorder=5,
+                  clip_on=True,
+                  marker=marker,
+                  color=color
+                  )
     ax_inset.plot(smoothed_temperature, smoothed_heat_capacity,
-            linestyle='-',
-            linewidth=0.7,
-            color='black',
-            marker='None',
-            zorder=2
-            )
+                  linestyle='-',
+                  linewidth=0.7,
+                  color='black',
+                  marker='None',
+                  zorder=2
+                  )
+
 
 def remove_overlapping_ticks(ax, xmin, xmax, ymin, ymax, keep_x_zero=False, keep_y_max=False):
     x_locs = ax.get_xticks()
@@ -239,6 +262,7 @@ def remove_overlapping_ticks(ax, xmin, xmax, ymin, ymax, keep_x_zero=False, keep
                 tick.tick1line.set_visible(False)
                 tick.tick2line.set_visible(False)
 
+
 def index_of_max(arr, target):
     max_val = float('-inf')
     max_idx = -1
@@ -250,16 +274,18 @@ def index_of_max(arr, target):
 
     return max_idx
 
+
 def main():
     args = parse_input()
 
     all_data = read_excel_file(args.input)
 
-    generate_heat_capacity_figure(all_data, args.output_dir, args.x_padding, args.y_padding)
+    generate_heat_capacity_figure(all_data, args)
 
     print(f"Figure saved to: {args.output_dir}/heat_capacity.jpg")
 
     exit(0)
+
 
 if __name__ == '__main__':
     main()
