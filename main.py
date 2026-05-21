@@ -278,11 +278,16 @@ def index_of_max(arr, target):
 def main():
     args = parse_input()
 
-    all_data = read_excel_file(args.input)
+    try:
+        all_data = read_excel_file(args.input)
 
-    generate_heat_capacity_figure(all_data, args)
+        generate_heat_capacity_figure(all_data, args)
 
-    print(f"Figure saved to: {args.output_dir}/heat_capacity.jpg")
+        print(f"Figure saved to: {args.output_dir}/heat_capacity.jpg")
+
+    except Exception as e:
+        print(e)
+        exit(1)
 
     exit(0)
 
