@@ -6,6 +6,9 @@ import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 
+marker = ['s', 'o', '^', 'D', 'v', '*']
+color = ['blue', 'red', 'green', 'yellow', 'purple', 'orange']
+
 
 def parse_input():
     try:
@@ -48,6 +51,13 @@ def parse_input():
             help='Maximum temperature of the inset.'
         )
 
+        parser.add_argument(
+            '-d', '--dev-split',
+            type=bool,
+            default=True,
+            help='Whether to generate separate figures for deviations.'
+        )
+
         args = parser.parse_args()
 
         print(f"Loading data from: {args.input}")
@@ -80,7 +90,7 @@ def generate_heat_capacity_figure(all_data, args):
     output_dir = args.output_dir
     x_pad = args.x_padding
     y_pad = args.y_padding
-    inset_xmax = args.inset_temp
+    inset_x_max = args.inset_temp
 
     # Import style information
     plt.style.use('./style.mplstyle')
@@ -93,60 +103,215 @@ def generate_heat_capacity_figure(all_data, args):
     inset_bounds = (0.50, 0.10, 0.45, 0.40)
     ax_inset = ax.inset_axes(inset_bounds)
 
-    inset_xmin, inset_ymin = 0, 0
+    inset_x_min, inset_y_min = 0, 0
 
     # Plot Data & Determine Maximum
     max_temperature = 0
     max_heat_capacity = 0
     inset_max_heat_capacity = 0
     i = 0
-    marker = 's'
-    color = 'blue'
     for label, df in all_data.items():
-        # Use a Different Shape & Colour for each Dataset
-        match i:
-            case 1:
-                marker = 'o'
-                color = 'red'
-            case 2:
-                marker = '^'
-                color = 'green'
-            case 3:
-                marker = 'D'
-                color = 'yellow'
-            case 4:
-                marker = 'v'
-                color = 'purple'
-            case 5:
-                marker = '*'
-                color = 'orange'
         # Plot the Heat Capacity
         add_heat_capacity_plot(ax, ax_inset, label, df['Measured Temperature'], df['Measured Heat Capacity'],
-                               df['Smoothed Temperature'], df['Smoothed Heat Capacity'], marker=marker, color=color)
+                               df['Smoothed Temperature'], df['Smoothed Heat Capacity'], m=marker[i], c=color[i])
         # Determine Maxima
         if df['Measured Temperature'].max() > max_temperature:
             max_temperature = df['Measured Temperature'].max()
         if df['Measured Heat Capacity'].max() > max_heat_capacity:
             max_heat_capacity = df['Measured Heat Capacity'].max()
         if df['Measured Heat Capacity'][
-            :index_of_max(df['Measured Temperature'], inset_xmax)].max() > inset_max_heat_capacity:
+            :index_of_max(df['Measured Temperature'], inset_x_max)].max() > inset_max_heat_capacity:
             inset_max_heat_capacity = df['Measured Heat Capacity'][
-                :index_of_max(df['Measured Temperature'], inset_xmax)].max()
+                :index_of_max(df['Measured Temperature'], inset_x_max)].max()
         i += 1
 
+    # Format the Figure
+    inset_y_max = inset_max_heat_capacity * y_pad
+    format_figure(ax, ax_inset, 0, max_temperature * x_pad, 0, max_heat_capacity * y_pad, inset_x_min, inset_x_max,
+                  inset_y_min, inset_y_max, r"$T\mathrm{/K}$",
+                  r"$C_{p,\mathrm{m}}\mathrm{\,(J\cdot K^{-1}\!\!\cdot mol^{-1})}$")
+
+    # Save the Figure and Close
+    plt.savefig(
+        f'{output_dir}/heat_capacity.jpg',
+        pil_kwargs={'quality': 100, 'subsampling': 0}
+    )
+    print(f"Figure saved to: {args.output_dir}/heat_capacity.jpg")
+
+    plt.close(fig)
+
+
+def add_heat_capacity_plot(ax, ax_inset, label, measured_temperature, measured_heat_capacity, smoothed_temperature,
+                           smoothed_heat_capacity, m='s', c='blue'):
+    ax.plot(measured_temperature, measured_heat_capacity,
+            zorder=5,
+            clip_on=False,
+            label=fr"$\mathrm{{{label}}}$",
+            marker=m,
+            color=c
+            )
+    ax.plot(smoothed_temperature, smoothed_heat_capacity,
+            linestyle='-',
+            linewidth=0.7,
+            color='black',
+            marker='None',
+            zorder=2
+            )
+    ax_inset.plot(measured_temperature, measured_heat_capacity,
+                  zorder=5,
+                  clip_on=True,
+                  marker=m,
+                  color=c
+                  )
+    ax_inset.plot(smoothed_temperature, smoothed_heat_capacity,
+                  linestyle='-',
+                  linewidth=0.7,
+                  color='black',
+                  marker='None',
+                  zorder=2
+                  )
+
+
+def generate_deviations_figures(all_data, args):
+    output_dir = args.output_dir
+    x_pad = args.x_padding
+    y_pad = args.y_padding
+    inset_x_max = args.inset_temp
+    dev_split = args.dev_split
+
+    # Import Style Information
+    plt.style.use('./style.mplstyle')
+
+    if not dev_split:
+        # TODO Implement Separate Deviations Figures
+        exit(1)
+
+    else:
+        # Generate Plot (fig, ax) and Inset (ax_inset)
+        fig, ax = plt.subplots(
+            figsize=(5, 3.5)
+        )
+
+        inset_bounds = (0.50, 0.10, 0.45, 0.40)
+        ax_inset = ax.inset_axes(inset_bounds)
+
+        inset_x_min, inset_y_min = 0, 0
+
+        # Plot Data & Determine Minima & Maximum
+        max_temperature = 0
+        min_deviation = 0
+        max_deviation = 0
+        inset_max_deviation = 0
+        y_min = 0
+        i = 0
+        for label, df in all_data.items():
+            # Plot the Heat Capacity
+            add_deviations_plot(ax, ax_inset, label, df['Measured Temperature'], df['Fit Deviations'], m=marker[i],
+                                c=color[i])
+            # Determine Maxima
+            if df['Measured Temperature'].max() > max_temperature:
+                max_temperature = df['Measured Temperature'].max()
+            if df['Fit Deviations'].max() > max_deviation:
+                max_deviation = df['Fit Deviations'].max()
+            if df['Fit Deviations'][
+                :index_of_max(df['Measured Temperature'], inset_x_max)].max() > inset_max_deviation:
+                inset_max_deviation = df['Fit Deviations'][
+                    :index_of_max(df['Measured Temperature'], inset_x_max)].max()
+
+            # Determine Minima
+            if df['Fit Deviations'].min() < min_deviation:
+                min_deviation = df['Fit Deviations'].min()
+            if df['Fit Deviations'][
+                :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad < inset_y_min:
+                inset_y_min = df['Fit Deviations'][
+                                  :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad
+
+            if (-((max_deviation * y_pad - df['Fit Deviations'][
+                index_of_min(df['Measured Temperature'],
+                             max_temperature * 0.5):].min()) / 0.4 - max_deviation * y_pad)) < y_min:
+                y_min = -((max_deviation * y_pad - df['Fit Deviations'][
+                    index_of_min(df['Measured Temperature'],
+                                 max_temperature * 0.5):].min()) / 0.4 - max_deviation * y_pad)
+
+            # Iterate through Data, Markers, and Colours
+            i += 1
+
+        # Format the Figure
+        if y_min > min_deviation:
+            y_min = min_deviation * y_pad
+
+        inset_y_max = inset_max_deviation * y_pad
+        format_figure(ax, ax_inset, 0, max_temperature * x_pad, y_min, max_deviation * y_pad, inset_x_min,
+                      inset_x_max, inset_y_min, inset_y_max, r"$T\mathrm{/K}$",
+                      r"$C_{p,\mathrm{m}}\mathrm{\,(J\cdot K^{-1}\!\!\cdot mol^{-1})}$")
+
+        add_center_line(ax, ax_inset, 0, max_temperature * x_pad, 0, inset_x_max)
+
+        # Reframe Legend
+        ax.legend(
+            loc='upper right',
+            bbox_to_anchor=(0.95, 0.95),
+            frameon=False,
+            fontsize=8
+        )
+
+        # Save the Figure and Close
+        plt.savefig(
+            f'{output_dir}/deviations.jpg',
+            pil_kwargs={'quality': 100, 'subsampling': 0}
+        )
+        print(f"Figure saved to: {output_dir}/deviations.jpg")
+
+        plt.close(fig)
+
+
+def add_deviations_plot(ax, ax_inset, label, measured_temperature, fit_deviations, m='s', c='blue'):
+    ax.plot(measured_temperature, fit_deviations,
+            zorder=5,
+            clip_on=False,
+            label=fr"$\mathrm{{{label}}}$",
+            marker=m,
+            color=c
+            )
+    ax_inset.plot(measured_temperature, fit_deviations,
+                  zorder=5,
+                  clip_on=True,
+                  marker=m,
+                  color=c
+                  )
+
+
+def add_center_line(ax, ax_inset, x_min, x_max, inset_x_min, inset_x_max):
+    ax.plot([x_min, x_max], [0, 0],
+            linestyle='-',
+            linewidth=0.7,
+            color='black',
+            marker='None',
+            zorder=2
+            )
+    ax_inset.plot([inset_x_min, inset_x_max], [0, 0],
+                  linestyle='-',
+                  linewidth=0.7,
+                  color='black',
+                  marker='None',
+                  zorder=2
+                  )
+
+
+def format_figure(ax, ax_inset, x_min, x_max, y_min, y_max, inset_x_min, inset_x_max, inset_y_min, inset_y_max, x_label,
+                  y_label):
     # Set Plot Limits
-    ax.set_xlim(0, max_temperature * x_pad)
+    ax.set_xlim(x_min, x_max)
     ax.set_ylim(
-        bottom=0,
-        top=max_heat_capacity * y_pad
+        bottom=y_min,
+        top=y_max
     )
 
     # Set Inset Limits
-    inset_ymax = inset_max_heat_capacity * y_pad
-    ax_inset.set_xlim(inset_xmin, inset_xmax)
+    ax_inset.set_xlim(inset_x_min, inset_x_max)
     ax_inset.set_ylim(
-        bottom=inset_ymin,
-        top=inset_ymax
+        bottom=inset_y_min,
+        top=inset_y_max
     )
 
     # Set Number of Major Ticks
@@ -154,7 +319,7 @@ def generate_heat_capacity_figure(all_data, args):
     ax.yaxis.set_major_locator(ticker.MaxNLocator(7))
 
     # Remove Ticks Overlapping with Spines
-    remove_overlapping_ticks(ax, 0, max_temperature * x_pad, 0, max_heat_capacity * y_pad)
+    remove_overlapping_ticks(ax, x_min, x_max, y_min, y_max)
 
     # Generate Legend & Axis Labels
     ax.legend(
@@ -164,8 +329,8 @@ def generate_heat_capacity_figure(all_data, args):
         fontsize=8
     )
 
-    ax.set_xlabel(r'$T\mathrm{/K}$')
-    ax.set_ylabel(r'$C_{p,\mathrm{m}}\mathrm{\,(J\cdot K^{-1}\!\!\cdot mol^{-1})}$')
+    ax.set_xlabel(rf'{x_label}')
+    ax.set_ylabel(rf'{y_label}')
 
     # Refactor Inset Spines & Ticks
     ax_inset.yaxis.tick_right()
@@ -186,66 +351,27 @@ def generate_heat_capacity_figure(all_data, args):
     )
 
     # Set Number of Inset Major Ticks
-    ax_inset.xaxis.set_major_locator(ticker.MaxNLocator(int(inset_xmax / 2 + 1)))
+    ax_inset.xaxis.set_major_locator(ticker.MaxNLocator(int(inset_x_max / 2 + 1)))
     ax_inset.yaxis.set_major_locator(ticker.MaxNLocator(5))
 
     # Remove Inset Ticks Overlapping with Spines
-    remove_overlapping_ticks(ax_inset, inset_xmin, inset_xmax, inset_ymin, inset_ymax,
+    remove_overlapping_ticks(ax_inset, inset_x_min, inset_x_max, inset_y_min, inset_y_max,
                              keep_x_zero=True,
                              keep_y_max=True
                              )
 
-    # Save the Figure and Close
-    plt.savefig(
-        f'{output_dir}/heat_capacity.jpg',
-        pil_kwargs={'quality': 100, 'subsampling': 0}
-    )
 
-    plt.close(fig)
-
-
-def add_heat_capacity_plot(ax, ax_inset, label, measured_temperature, measured_heat_capacity, smoothed_temperature,
-                           smoothed_heat_capacity, marker='s', color='blue'):
-    ax.plot(measured_temperature, measured_heat_capacity,
-            zorder=5,
-            clip_on=False,
-            label=fr"$\mathrm{{{label}}}$",
-            marker=marker,
-            color=color
-            )
-    ax.plot(smoothed_temperature, smoothed_heat_capacity,
-            linestyle='-',
-            linewidth=0.7,
-            color='black',
-            marker='None',
-            zorder=2
-            )
-    ax_inset.plot(measured_temperature, measured_heat_capacity,
-                  zorder=5,
-                  clip_on=True,
-                  marker=marker,
-                  color=color
-                  )
-    ax_inset.plot(smoothed_temperature, smoothed_heat_capacity,
-                  linestyle='-',
-                  linewidth=0.7,
-                  color='black',
-                  marker='None',
-                  zorder=2
-                  )
-
-
-def remove_overlapping_ticks(ax, xmin, xmax, ymin, ymax, keep_x_zero=False, keep_y_max=False):
+def remove_overlapping_ticks(ax, x_min, x_max, y_min, y_max, keep_x_zero=False, keep_y_max=False):
     x_locs = ax.get_xticks()
     x_ticks = ax.xaxis.get_major_ticks()
 
     if len(x_locs) == len(x_ticks):
         for loc, tick in zip(x_locs, x_ticks):
-            if np.isclose(loc, xmin):
+            if np.isclose(loc, x_min):
                 if not keep_x_zero:
                     tick.tick1line.set_visible(False)
                     tick.tick2line.set_visible(False)
-            elif np.isclose(loc, xmax):
+            elif np.isclose(loc, x_max):
                 tick.tick1line.set_visible(False)
                 tick.tick2line.set_visible(False)
 
@@ -254,11 +380,11 @@ def remove_overlapping_ticks(ax, xmin, xmax, ymin, ymax, keep_x_zero=False, keep
 
     if len(y_locs) == len(y_ticks):
         for loc, tick in zip(y_locs, y_ticks):
-            if np.isclose(loc, ymax):
+            if np.isclose(loc, y_max):
                 if not keep_y_max:
                     tick.tick1line.set_visible(False)
                     tick.tick2line.set_visible(False)
-            elif np.isclose(loc, ymin):
+            elif np.isclose(loc, y_min):
                 tick.tick1line.set_visible(False)
                 tick.tick2line.set_visible(False)
 
@@ -275,6 +401,18 @@ def index_of_max(arr, target):
     return max_idx
 
 
+def index_of_min(arr, target):
+    min_val = float('inf')
+    min_idx = -1
+
+    for idx, val in enumerate(arr):
+        if target < val < min_val:
+            min_val = val
+            min_idx = idx
+
+    return min_idx
+
+
 def main():
     args = parse_input()
 
@@ -283,7 +421,7 @@ def main():
 
         generate_heat_capacity_figure(all_data, args)
 
-        print(f"Figure saved to: {args.output_dir}/heat_capacity.jpg")
+        generate_deviations_figures(all_data, args)
 
     except Exception as e:
         print(e)
