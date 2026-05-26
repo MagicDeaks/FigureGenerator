@@ -182,9 +182,58 @@ def generate_deviations_figures(all_data, args):
     # Import Style Information
     plt.style.use('./style.mplstyle')
 
-    if not dev_split:
-        # TODO Implement Separate Deviations Figures
-        exit(1)
+    if dev_split:
+        i = 0
+        for label, df in all_data.items():
+            fig, ax = plt.subplots(
+                figsize=(5, 3.5)
+            )
+
+            inset_bounds = (0.50, 0.10, 0.40, 0.40)
+            ax_inset = ax.inset_axes(inset_bounds)
+
+            inset_x_min, inset_min_deviation = 0, 0
+            max_temperature = df['Measured Temperature'].max() * x_pad
+            min_deviation = df['Fit Deviations'].min() * y_pad
+            max_deviation = df['Fit Deviations'].max() * y_pad
+            inset_max_deviation = df['Fit Deviations'][
+                                      :index_of_max(df['Measured Temperature'], inset_x_max)].max() * y_pad
+            inset_min_deviation = df['Fit Deviations'][
+                                      :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad
+
+            y_lower_bound = -((max_deviation - df['Fit Deviations'][
+                index_of_min(df['Measured Temperature'],
+                             max_temperature * 0.5):].min()) / 0.4 - max_deviation)
+
+            if min_deviation > y_lower_bound:
+                min_deviation = y_lower_bound
+
+            add_deviations_plot(ax, ax_inset, label, df['Measured Temperature'], df['Fit Deviations'], m=marker[i],
+                                c=color[i])
+
+            format_figure(ax, ax_inset, 0, max_temperature, min_deviation, max_deviation, inset_x_min,
+                          inset_x_max, inset_min_deviation, inset_max_deviation, r"$T\mathrm{/K}$",
+                          r"$C_{p,\mathrm{m}}\mathrm{\,(J\cdot K^{-1}\!\!\cdot mol^{-1})}$")
+
+            add_center_line(ax, ax_inset, 0, max_temperature * x_pad, 0, inset_x_max)
+
+            ax.legend(
+                loc='upper right',
+                bbox_to_anchor=(0.95, 0.95),
+                frameon=False,
+                fontsize=8
+            )
+
+            plt.savefig(
+                f'{output_dir}/deviations_{i}.jpg',
+                pil_kwargs={'quality': 100, 'subsampling': 0}
+            )
+            print(f"Figure saved to: {output_dir}/deviations_{i}.jpg")
+
+            plt.close(fig)
+
+            i += 1
+
 
     else:
         # Generate Plot (fig, ax) and Inset (ax_inset)
@@ -192,10 +241,10 @@ def generate_deviations_figures(all_data, args):
             figsize=(5, 3.5)
         )
 
-        inset_bounds = (0.50, 0.10, 0.45, 0.40)
+        inset_bounds = (0.50, 0.10, 0.40, 0.40)
         ax_inset = ax.inset_axes(inset_bounds)
 
-        inset_x_min, inset_y_min = 0, 0
+        inset_x_min, inset_min_deviation = 0, 0
 
         # Plot Data & Determine Minima & Maximum
         max_temperature = 0
@@ -222,9 +271,9 @@ def generate_deviations_figures(all_data, args):
             if df['Fit Deviations'].min() < min_deviation:
                 min_deviation = df['Fit Deviations'].min()
             if df['Fit Deviations'][
-                :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad < inset_y_min:
-                inset_y_min = df['Fit Deviations'][
-                                  :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad
+                :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad < inset_min_deviation:
+                inset_min_deviation = df['Fit Deviations'][
+                                          :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad
 
             if (-((max_deviation * y_pad - df['Fit Deviations'][
                 index_of_min(df['Measured Temperature'],
@@ -242,7 +291,7 @@ def generate_deviations_figures(all_data, args):
 
         inset_y_max = inset_max_deviation * y_pad
         format_figure(ax, ax_inset, 0, max_temperature * x_pad, y_min, max_deviation * y_pad, inset_x_min,
-                      inset_x_max, inset_y_min, inset_y_max, r"$T\mathrm{/K}$",
+                      inset_x_max, inset_min_deviation, inset_y_max, r"$T\mathrm{/K}$",
                       r"$C_{p,\mathrm{m}}\mathrm{\,(J\cdot K^{-1}\!\!\cdot mol^{-1})}$")
 
         add_center_line(ax, ax_inset, 0, max_temperature * x_pad, 0, inset_x_max)
