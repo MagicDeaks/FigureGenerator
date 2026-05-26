@@ -44,7 +44,7 @@ ytick.major.width: 0.7
 # Axis Padding
 xtick.major.pad: 6.0
 ytick.major.pad: 6.0
-axes.labelpad: 6.0
+axes.labelpad: 4.0
 
 # Minor Tick Sizes & Widths
 xtick.minor.size: 2.2
