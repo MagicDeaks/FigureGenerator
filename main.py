@@ -34,20 +34,20 @@ def parse_input():
             '-x', '--x-padding',
             type=float,
             default=1.05,
-            help='Padding for x-axes.'
+            help='Padding for x-axes. 1 means no padding.'
         )
 
         parser.add_argument(
             '-y', '--y-padding',
             type=float,
             default=1.1,
-            help='Padding for y-axes.'
+            help='Padding for y-axes. 1 means no padding.'
         )
 
         parser.add_argument(
             '-t', '--inset-temp',
             type=float,
-            default=14.7,
+            default=14.8,
             help='Maximum temperature of the inset.'
         )
 
@@ -56,6 +56,13 @@ def parse_input():
             type=bool,
             default=True,
             help='Whether to generate separate figures for deviations.'
+        )
+
+        parser.add_argument(
+            '-g', '--tga',
+            type=bool,
+            default=False,
+            help='Whether to generate TGA figures.'
         )
 
         args = parser.parse_args()
@@ -100,7 +107,7 @@ def generate_heat_capacity_figure(all_data, args):
         figsize=(5, 3.5)
     )
 
-    inset_bounds = (0.50, 0.10, 0.45, 0.40)
+    inset_bounds = (0.50, 0.10, 0.40, 0.40)
     ax_inset = ax.inset_axes(inset_bounds)
 
     inset_x_min, inset_y_min = 0, 0
@@ -213,7 +220,7 @@ def generate_deviations_figures(all_data, args):
 
             format_figure(ax, ax_inset, 0, max_temperature, min_deviation, max_deviation, inset_x_min,
                           inset_x_max, inset_min_deviation, inset_max_deviation, r"$T\mathrm{/K}$",
-                          r"$C_{p,\mathrm{m}}\mathrm{\,(J\cdot K^{-1}\!\!\cdot mol^{-1})}$")
+                          r"$(C - C_{fit}) / C_{fit} \times 100$")
 
             add_center_line(ax, ax_inset, 0, max_temperature * x_pad, 0, inset_x_max)
 
@@ -292,7 +299,7 @@ def generate_deviations_figures(all_data, args):
         inset_y_max = inset_max_deviation * y_pad
         format_figure(ax, ax_inset, 0, max_temperature * x_pad, y_min, max_deviation * y_pad, inset_x_min,
                       inset_x_max, inset_min_deviation, inset_y_max, r"$T\mathrm{/K}$",
-                      r"$C_{p,\mathrm{m}}\mathrm{\,(J\cdot K^{-1}\!\!\cdot mol^{-1})}$")
+                      r"$(C - C_{fit}) / C_{fit} \times 100$")
 
         add_center_line(ax, ax_inset, 0, max_temperature * x_pad, 0, inset_x_max)
 
@@ -328,6 +335,61 @@ def add_deviations_plot(ax, ax_inset, label, measured_temperature, fit_deviation
                   marker=m,
                   color=c
                   )
+
+
+def generate_tga_figures(all_data, args):
+    output_dir = args.output_dir
+    bottom_pad = 0.9
+
+    i = 0
+    for label, df in all_data.items():
+        fig, ax = plt.subplots(
+            figsize=(5, 3.5)
+        )
+
+        temperature = df['TGA Temperature']
+        mass_percent = df['TGA Mass Loss']
+
+        min_temperature = temperature.min()
+        max_temperature = temperature.max()
+        min_mass_percent = mass_percent.min()
+        max_mass_percent = mass_percent.max()
+
+        ax.plot(temperature, mass_percent,
+                linestyle='-',
+                linewidth=0.7,
+                color=color[i],
+                marker='None',
+                zorder=2
+                )
+
+        ax.set_xlim(min_temperature, max_temperature)
+        ax.set_ylim(bottom=min_mass_percent * bottom_pad, top=max_mass_percent)
+
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(7))
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(7))
+
+        remove_overlapping_ticks(ax, min_temperature, max_temperature, min_mass_percent * bottom_pad, max_mass_percent)
+
+        ax.legend(
+            loc='upper right',
+            bbox_to_anchor=(0.95, 0.95),
+            frameon=False,
+            fontsize=8
+        )
+
+        ax.set_xlabel('$T\mathrm{\circ C}$')
+        ax.set_ylabel('$\mathrm{Mass/%}$')
+
+        plt.savefig(
+            f'{output_dir}/tga_{i}.jpg',
+            pil_kwargs={'quality': 100, 'subsampling': 0}
+        )
+        print(f"Figure saved to: {output_dir}/tga_{i}.jpg")
+
+        plt.close(fig)
+
+        i += 1
 
 
 def add_center_line(ax, ax_inset, x_min, x_max, inset_x_min, inset_x_max):
@@ -471,6 +533,9 @@ def main():
         generate_heat_capacity_figure(all_data, args)
 
         generate_deviations_figures(all_data, args)
+
+        if args.tga is True:
+            generate_tga_figures(all_data, args)
 
     except Exception as e:
         print(e)
