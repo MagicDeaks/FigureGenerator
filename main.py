@@ -189,6 +189,14 @@ def generate_deviations_figures(all_data, args):
     # Import Style Information
     plt.style.use('./style.mplstyle')
 
+    for label, df in all_data.items():
+        for i in df['Fit Deviations'].length:
+            if pd.isnull(df['Fit Deviations'][i]):
+                all_data[label]['Fit Deviations'] = all_data[label]['Fit Deviations'].remove[i]
+                all_data[label]['Measured Temperature'] = all_data[label]['Measured Temperature'].remove[i]
+
+
+
     if dev_split:
         i = 0
         for label, df in all_data.items():
