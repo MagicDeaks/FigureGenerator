@@ -53,16 +53,23 @@ def parse_input():
 
         parser.add_argument(
             '-d', '--dev-split',
-            type=bool,
+            type=lambda x: str(x).lower() in ['true', '1', 't', 'y', 'yes'],
             default=True,
             help='Whether to generate separate figures for deviations.'
         )
 
         parser.add_argument(
             '-g', '--tga',
-            type=bool,
+            type=lambda x: str(x).lower() in ['true', '1', 't', 'y', 'yes'],
             default=False,
             help='Whether to generate TGA figures.'
+        )
+
+        parser.add_argument(
+            '-m', '--make-inset',
+            type=lambda x: str(x).lower() in ['true', '1', 't', 'y', 'yes'],
+            default=True,
+            help='Whether to make inset deviation figures.'
         )
 
         args = parser.parse_args()
@@ -150,10 +157,13 @@ def generate_heat_capacity_figure(all_data, args):
 
 def add_heat_capacity_plot(ax, ax_inset, label, measured_temperature, measured_heat_capacity, smoothed_temperature,
                            smoothed_heat_capacity, m='s', c='blue'):
+    # Escape spaces so the LaTeX MathText engine recognizes them
+    formatted_label = label.replace(' ', r'\ ')
+
     ax.plot(measured_temperature, measured_heat_capacity,
             zorder=5,
             clip_on=False,
-            label=fr"$\mathrm{{{label}}}$",
+            label=fr"$\mathrm{{{formatted_label}}}$",
             marker=m,
             color=c
             )
@@ -164,6 +174,10 @@ def add_heat_capacity_plot(ax, ax_inset, label, measured_temperature, measured_h
             marker='None',
             zorder=2
             )
+
+    if not ax_inset:
+        return
+
     ax_inset.plot(measured_temperature, measured_heat_capacity,
                   zorder=5,
                   clip_on=True,
@@ -178,7 +192,6 @@ def add_heat_capacity_plot(ax, ax_inset, label, measured_temperature, measured_h
                   zorder=2
                   )
 
-
 def generate_deviations_figures(all_data, args):
     output_dir = args.output_dir
     x_pad = args.x_padding
@@ -189,42 +202,43 @@ def generate_deviations_figures(all_data, args):
     # Import Style Information
     plt.style.use('./style.mplstyle')
 
-    for label, df in all_data.items():
-        for i in range(len(df['Fit Deviations'])):
-            if pd.isnull(df['Fit Deviations'][i]):
-                all_data[label]['Fit Deviations'].drop(all_data[label]['Fit Deviations'].index[i], inplace=True)
-                all_data[label]['Measured Heat Capacity'].drop(all_data[label]['Measured Heat Capacity'].index[i], inplace=True)
-
-
-
     if dev_split:
         i = 0
         for label, df in all_data.items():
-            fig, ax = plt.subplots(
-                figsize=(5, 3.5)
-            )
+            # Ensure X and Y are aligned by dropping rows with NaNs in either column
+            clean_df = df[['Measured Temperature', 'Fit Deviations']].dropna().reset_index(drop=True)
+
+            # Skip plotting if there's no valid deviation data for this set
+            if clean_df.empty:
+                continue
+
+            fig, ax = plt.subplots(figsize=(5, 3.5))
 
             inset_bounds = (0.50, 0.10, 0.40, 0.40)
-            ax_inset = ax.inset_axes(inset_bounds)
+            ax_inset = False
+            if args.make_inset:
+                ax_inset = ax.inset_axes(inset_bounds)
 
             inset_x_min, inset_min_deviation = 0, 0
-            max_temperature = df['Measured Temperature'].max() * x_pad
-            min_deviation = df['Fit Deviations'].min() * y_pad
-            max_deviation = df['Fit Deviations'].max() * y_pad
-            inset_max_deviation = df['Fit Deviations'][
-                                      :index_of_max(df['Measured Temperature'], inset_x_max)].max() * y_pad
-            inset_min_deviation = df['Fit Deviations'][
-                                      :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad
 
-            y_lower_bound = -((max_deviation - df['Fit Deviations'][
-                index_of_min(df['Measured Temperature'],
+            # Use clean_df instead of df for all calculations and plotting
+            max_temperature = clean_df['Measured Temperature'].max() * x_pad
+            min_deviation = clean_df['Fit Deviations'].min() * y_pad
+            max_deviation = clean_df['Fit Deviations'].max() * y_pad
+            inset_max_deviation = clean_df['Fit Deviations'][
+                                      :index_of_max(clean_df['Measured Temperature'], inset_x_max)].max() * y_pad
+            inset_min_deviation = clean_df['Fit Deviations'][
+                                      :index_of_max(clean_df['Measured Temperature'], inset_x_max)].min() * y_pad
+
+            y_lower_bound = -((max_deviation - clean_df['Fit Deviations'][
+                index_of_min(clean_df['Measured Temperature'],
                              max_temperature * 0.5):].min()) / 0.4 - max_deviation)
+            if args.make_inset:
+                if min_deviation > y_lower_bound:
+                    min_deviation = y_lower_bound
 
-            if min_deviation > y_lower_bound:
-                min_deviation = y_lower_bound
-
-            add_deviations_plot(ax, ax_inset, label, df['Measured Temperature'], df['Fit Deviations'], m=marker[i],
-                                c=color[i])
+            add_deviations_plot(ax, ax_inset, label, clean_df['Measured Temperature'], clean_df['Fit Deviations'],
+                                m=marker[i], c=color[i])
 
             format_figure(ax, ax_inset, 0, max_temperature, min_deviation, max_deviation, inset_x_min,
                           inset_x_max, inset_min_deviation, inset_max_deviation, r"$T\mathrm{/K}$",
@@ -232,75 +246,67 @@ def generate_deviations_figures(all_data, args):
 
             add_center_line(ax, ax_inset, 0, max_temperature * x_pad, 0, inset_x_max)
 
-            ax.legend(
-                loc='upper right',
-                bbox_to_anchor=(0.95, 0.95),
-                frameon=False,
-                fontsize=8
-            )
+            ax.legend(loc='upper right', bbox_to_anchor=(0.95, 0.95), frameon=False, fontsize=8)
 
-            plt.savefig(
-                f'{output_dir}/deviations_{i}.jpg',
-                pil_kwargs={'quality': 100, 'subsampling': 0}
-            )
+            plt.savefig(f'{output_dir}/deviations_{i}.jpg', pil_kwargs={'quality': 100, 'subsampling': 0})
             print(f"Figure saved to: {output_dir}/deviations_{i}.jpg")
-
             plt.close(fig)
-
             i += 1
 
-
     else:
-        # Generate Plot (fig, ax) and Inset (ax_inset)
-        fig, ax = plt.subplots(
-            figsize=(5, 3.5)
-        )
-
+        fig, ax = plt.subplots(figsize=(5, 3.5))
         inset_bounds = (0.50, 0.10, 0.40, 0.40)
-        ax_inset = ax.inset_axes(inset_bounds)
+        ax_inset = False
 
+        if args.make_inset:
+            ax_inset = ax.inset_axes(inset_bounds)
         inset_x_min, inset_min_deviation = 0, 0
 
-        # Plot Data & Determine Minima & Maximum
         max_temperature = 0
         min_deviation = 0
         max_deviation = 0
         inset_max_deviation = 0
         y_min = 0
         i = 0
+
         for label, df in all_data.items():
-            # Plot the Heat Capacity
-            add_deviations_plot(ax, ax_inset, label, df['Measured Temperature'], df['Fit Deviations'], m=marker[i],
-                                c=color[i])
+            # Ensure X and Y are aligned
+            clean_df = df[['Measured Temperature', 'Fit Deviations']].dropna().reset_index(drop=True)
+
+            if clean_df.empty:
+                continue
+
+            # Plot the Heat Capacity using clean_df
+            add_deviations_plot(ax, ax_inset, label, clean_df['Measured Temperature'], clean_df['Fit Deviations'],
+                                m=marker[i], c=color[i])
+
             # Determine Maxima
-            if df['Measured Temperature'].max() > max_temperature:
-                max_temperature = df['Measured Temperature'].max()
-            if df['Fit Deviations'].max() > max_deviation:
-                max_deviation = df['Fit Deviations'].max()
-            if df['Fit Deviations'][
-                :index_of_max(df['Measured Temperature'], inset_x_max)].max() > inset_max_deviation:
-                inset_max_deviation = df['Fit Deviations'][
-                    :index_of_max(df['Measured Temperature'], inset_x_max)].max()
+            if clean_df['Measured Temperature'].max() > max_temperature:
+                max_temperature = clean_df['Measured Temperature'].max()
+            if clean_df['Fit Deviations'].max() > max_deviation:
+                max_deviation = clean_df['Fit Deviations'].max()
+            if clean_df['Fit Deviations'][
+                :index_of_max(clean_df['Measured Temperature'], inset_x_max)].max() > inset_max_deviation:
+                inset_max_deviation = clean_df['Fit Deviations'][
+                    :index_of_max(clean_df['Measured Temperature'], inset_x_max)].max()
 
             # Determine Minima
-            if df['Fit Deviations'].min() < min_deviation:
-                min_deviation = df['Fit Deviations'].min()
-            if df['Fit Deviations'][
-                :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad < inset_min_deviation:
-                inset_min_deviation = df['Fit Deviations'][
-                                          :index_of_max(df['Measured Temperature'], inset_x_max)].min() * y_pad
+            if clean_df['Fit Deviations'].min() < min_deviation:
+                min_deviation = clean_df['Fit Deviations'].min()
+            if clean_df['Fit Deviations'][
+                :index_of_max(clean_df['Measured Temperature'], inset_x_max)].min() * y_pad < inset_min_deviation:
+                inset_min_deviation = clean_df['Fit Deviations'][
+                                          :index_of_max(clean_df['Measured Temperature'], inset_x_max)].min() * y_pad
 
-            if (-((max_deviation * y_pad - df['Fit Deviations'][
-                index_of_min(df['Measured Temperature'],
+            if args.make_inset and (-((max_deviation * y_pad - clean_df['Fit Deviations'][
+                index_of_min(clean_df['Measured Temperature'],
                              max_temperature * 0.5):].min()) / 0.4 - max_deviation * y_pad)) < y_min:
-                y_min = -((max_deviation * y_pad - df['Fit Deviations'][
-                    index_of_min(df['Measured Temperature'],
+                y_min = -((max_deviation * y_pad - clean_df['Fit Deviations'][
+                    index_of_min(clean_df['Measured Temperature'],
                                  max_temperature * 0.5):].min()) / 0.4 - max_deviation * y_pad)
 
-            # Iterate through Data, Markers, and Colours
             i += 1
 
-        # Format the Figure
         if y_min > min_deviation:
             y_min = min_deviation * y_pad
 
@@ -311,39 +317,34 @@ def generate_deviations_figures(all_data, args):
 
         add_center_line(ax, ax_inset, 0, max_temperature * x_pad, 0, inset_x_max)
 
-        # Reframe Legend
-        ax.legend(
-            loc='upper right',
-            bbox_to_anchor=(0.95, 0.95),
-            frameon=False,
-            fontsize=8
-        )
+        ax.legend(loc='upper right', bbox_to_anchor=(0.95, 0.95), frameon=False, fontsize=8)
 
-        # Save the Figure and Close
-        plt.savefig(
-            f'{output_dir}/deviations.jpg',
-            pil_kwargs={'quality': 100, 'subsampling': 0}
-        )
+        plt.savefig(f'{output_dir}/deviations.jpg', pil_kwargs={'quality': 100, 'subsampling': 0})
         print(f"Figure saved to: {output_dir}/deviations.jpg")
-
         plt.close(fig)
 
 
 def add_deviations_plot(ax, ax_inset, label, measured_temperature, fit_deviations, m='s', c='blue'):
+    # Escape spaces so the LaTeX MathText engine recognizes them
+    formatted_label = label.replace(' ', r'\ ')
+
     ax.plot(measured_temperature, fit_deviations,
             zorder=5,
             clip_on=False,
-            label=fr"$\mathrm{{{label}}}$",
+            label=fr"$\mathrm{{{formatted_label}}}$",
             marker=m,
             color=c
             )
+
+    if not ax_inset:
+        return
+
     ax_inset.plot(measured_temperature, fit_deviations,
                   zorder=5,
                   clip_on=True,
                   marker=m,
                   color=c
                   )
-
 
 def generate_tga_figures(all_data, args):
     output_dir = args.output_dir
@@ -408,7 +409,8 @@ def add_center_line(ax, ax_inset, x_min, x_max, inset_x_min, inset_x_max):
             marker='None',
             zorder=2
             )
-    ax_inset.plot([inset_x_min, inset_x_max], [0, 0],
+    if ax_inset:
+        ax_inset.plot([inset_x_min, inset_x_max], [0, 0],
                   linestyle='-',
                   linewidth=0.7,
                   color='black',
@@ -424,13 +426,6 @@ def format_figure(ax, ax_inset, x_min, x_max, y_min, y_max, inset_x_min, inset_x
     ax.set_ylim(
         bottom=y_min,
         top=y_max
-    )
-
-    # Set Inset Limits
-    ax_inset.set_xlim(inset_x_min, inset_x_max)
-    ax_inset.set_ylim(
-        bottom=inset_y_min,
-        top=inset_y_max
     )
 
     # Set Number of Major Ticks
@@ -451,33 +446,42 @@ def format_figure(ax, ax_inset, x_min, x_max, y_min, y_max, inset_x_min, inset_x
     ax.set_xlabel(rf'{x_label}')
     ax.set_ylabel(rf'{y_label}')
 
-    # Refactor Inset Spines & Ticks
-    ax_inset.yaxis.tick_right()
-    ax_inset.yaxis.set_label_position('right')
+    # Execute inset formatting ONLY if ax_inset exists
+    if ax_inset:
+        # Set Inset Limits
+        ax_inset.set_xlim(inset_x_min, inset_x_max)
+        ax_inset.set_ylim(
+            bottom=inset_y_min,
+            top=inset_y_max
+        )
 
-    ax_inset.spines['top'].set_visible(False)
-    ax_inset.spines['left'].set_visible(False)
+        # Refactor Inset Spines & Ticks
+        ax_inset.yaxis.tick_right()
+        ax_inset.yaxis.set_label_position('right')
 
-    ax_inset.tick_params(
-        axis='both',
-        which='both',
-        direction='in',
-        top=False,
-        left=False,
-        right=True,
-        bottom=True,
-        labelsize=8
-    )
+        ax_inset.spines['top'].set_visible(False)
+        ax_inset.spines['left'].set_visible(False)
 
-    # Set Number of Inset Major Ticks
-    ax_inset.xaxis.set_major_locator(ticker.MaxNLocator(int(inset_x_max / 2 + 1)))
-    ax_inset.yaxis.set_major_locator(ticker.MaxNLocator(5))
+        ax_inset.tick_params(
+            axis='both',
+            which='both',
+            direction='in',
+            top=False,
+            left=False,
+            right=True,
+            bottom=True,
+            labelsize=8
+        )
 
-    # Remove Inset Ticks Overlapping with Spines
-    remove_overlapping_ticks(ax_inset, inset_x_min, inset_x_max, inset_y_min, inset_y_max,
-                             keep_x_zero=True,
-                             keep_y_max=True
-                             )
+        # Set Number of Inset Major Ticks
+        ax_inset.xaxis.set_major_locator(ticker.MaxNLocator(int(inset_x_max / 2 + 1)))
+        ax_inset.yaxis.set_major_locator(ticker.MaxNLocator(5))
+
+        # Remove Inset Ticks Overlapping with Spines
+        remove_overlapping_ticks(ax_inset, inset_x_min, inset_x_max, inset_y_min, inset_y_max,
+                                 keep_x_zero=True,
+                                 keep_y_max=True
+                                 )
 
 
 def remove_overlapping_ticks(ax, x_min, x_max, y_min, y_max, keep_x_zero=False, keep_y_max=False):
