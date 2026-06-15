@@ -190,10 +190,10 @@ def generate_deviations_figures(all_data, args):
     plt.style.use('./style.mplstyle')
 
     for label, df in all_data.items():
-        for i in df['Fit Deviations'].length:
+        for i in range(len(df['Fit Deviations'])):
             if pd.isnull(df['Fit Deviations'][i]):
-                all_data[label]['Fit Deviations'] = all_data[label]['Fit Deviations'].remove[i]
-                all_data[label]['Measured Temperature'] = all_data[label]['Measured Temperature'].remove[i]
+                all_data[label]['Fit Deviations'].drop(all_data[label]['Fit Deviations'].index[i], inplace=True)
+                all_data[label]['Measured Heat Capacity'].drop(all_data[label]['Measured Heat Capacity'].index[i], inplace=True)
 
 
 
